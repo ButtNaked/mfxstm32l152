@@ -1,7 +1,8 @@
 #![no_std]
+#![allow(clippy::upper_case_acronyms)]
 
-use embedded_hal::blocking::i2c::{Write, WriteRead};
 use embedded_hal::blocking::delay::DelayUs;
+use embedded_hal::blocking::i2c::{Write, WriteRead};
 use embedded_hal::digital::v2::OutputPin;
 
 use core::fmt;
@@ -13,10 +14,7 @@ pub struct Ampere {
 
 impl Ampere {
     pub fn new(value: u32, exponent: u8) -> Self {
-        Self {
-            value,
-            exponent,
-        }
+        Self { value, exponent }
     }
 }
 
@@ -131,7 +129,6 @@ pub struct MFX<I2C, GPIO, Delay> {
     address: u8,
 }
 
-
 impl<I2C, GPIO, Delay, E> MFX<I2C, GPIO, Delay>
 where
     I2C: WriteRead<Error = E> + Write<Error = E>,
@@ -159,18 +156,15 @@ where
         Ok(())
     }
 
-    pub fn set_idd_ctrl(&mut self, calibration_disabled: bool, vref_disabled: bool, nb_shunt: NbShunt) -> Result<(), E> {
-        let cal = if calibration_disabled {
-            0x80
-        } else {
-            0x00
-        };
+    pub fn set_idd_ctrl(
+        &mut self,
+        calibration_disabled: bool,
+        vref_disabled: bool,
+        nb_shunt: NbShunt,
+    ) -> Result<(), E> {
+        let cal = if calibration_disabled { 0x80 } else { 0x00 };
 
-        let vref = if vref_disabled {
-            0x40
-        } else {
-            0x00
-        };
+        let vref = if vref_disabled { 0x40 } else { 0x00 };
         let nb_shunt = nb_shunt as u8;
         let value = (nb_shunt << 1) | cal | vref;
         self.write_u8(Register::IDD_CTRL as u8, value)?;
@@ -181,27 +175,58 @@ where
         self.write_u8(Register::IDD_NBR_OF_MEAS as u8, nb)
     }
 
-    pub fn set_idd_shunt0(&mut self, data: u16, stab_delay: u8 ) -> Result<(), E> {
-        self.set_idd_shunt(Register::IDD_SHUNT0, data, Register::IDD_SH0_STABILIZATION, stab_delay)
+    pub fn set_idd_shunt0(&mut self, data: u16, stab_delay: u8) -> Result<(), E> {
+        self.set_idd_shunt(
+            Register::IDD_SHUNT0,
+            data,
+            Register::IDD_SH0_STABILIZATION,
+            stab_delay,
+        )
     }
 
     pub fn set_idd_shunt1(&mut self, data: u16, stab_delay: u8) -> Result<(), E> {
-        self.set_idd_shunt(Register::IDD_SHUNT1, data, Register::IDD_SH1_STABILIZATION, stab_delay)
+        self.set_idd_shunt(
+            Register::IDD_SHUNT1,
+            data,
+            Register::IDD_SH1_STABILIZATION,
+            stab_delay,
+        )
     }
 
     pub fn set_idd_shunt2(&mut self, data: u16, stab_delay: u8) -> Result<(), E> {
-        self.set_idd_shunt(Register::IDD_SHUNT2, data, Register::IDD_SH2_STABILIZATION, stab_delay)
+        self.set_idd_shunt(
+            Register::IDD_SHUNT2,
+            data,
+            Register::IDD_SH2_STABILIZATION,
+            stab_delay,
+        )
     }
 
     pub fn set_idd_shunt3(&mut self, data: u16, stab_delay: u8) -> Result<(), E> {
-        self.set_idd_shunt(Register::IDD_SHUNT3, data, Register::IDD_SH3_STABILIZATION, stab_delay)
+        self.set_idd_shunt(
+            Register::IDD_SHUNT3,
+            data,
+            Register::IDD_SH3_STABILIZATION,
+            stab_delay,
+        )
     }
 
     pub fn set_idd_shunt4(&mut self, data: u16, stab_delay: u8) -> Result<(), E> {
-        self.set_idd_shunt(Register::IDD_SHUNT4, data, Register::IDD_SH4_STABILIZATION, stab_delay)
+        self.set_idd_shunt(
+            Register::IDD_SHUNT4,
+            data,
+            Register::IDD_SH4_STABILIZATION,
+            stab_delay,
+        )
     }
 
-    fn set_idd_shunt(&mut self, reg_shunt: Register, data: u16, reg_delay: Register, stab_delay: u8) -> Result<(), E> {
+    fn set_idd_shunt(
+        &mut self,
+        reg_shunt: Register,
+        data: u16,
+        reg_delay: Register,
+        stab_delay: u8,
+    ) -> Result<(), E> {
         self.noinc_write_be_u16(reg_shunt as u8, data)?;
         self.write_u8(reg_delay as u8, stab_delay)
     }
@@ -210,7 +235,7 @@ where
         self.noinc_write_be_u16(Register::IDD_GAIN as u8, value)
     }
 
-    pub fn set_idd_pre_delay(&mut self, unit: DelayUnit, value: u8) -> Result<(), E>{
+    pub fn set_idd_pre_delay(&mut self, unit: DelayUnit, value: u8) -> Result<(), E> {
         let value = self.cap_delay_value(value);
         let unit = unit as u8;
         self.write_u8(Register::IDD_PRE_DELAY as u8, unit & value)
@@ -259,8 +284,9 @@ where
 
     pub fn error_code(&mut self) -> Result<u8, E> {
         //self.i2c.read_u8(self.address, RoRegister::ERROR_MSG)
-        let mut buf = [0;1];
-        self.i2c.write_read(self.address, &[RoRegister::ERROR_MSG as u8], &mut buf)?;
+        let mut buf = [0; 1];
+        self.i2c
+            .write_read(self.address, &[RoRegister::ERROR_MSG as u8], &mut buf)?;
         Ok(buf[0])
     }
 
@@ -287,19 +313,19 @@ where
     }
 
     fn read_u8(&mut self, reg: u8) -> Result<u8, E> {
-        let mut buf = [0;1];
+        let mut buf = [0; 1];
         self.i2c.write_read(self.address, &[reg], &mut buf)?;
         Ok(buf[0])
     }
 
     fn read_be_u24(&mut self, reg: u8) -> Result<u32, E> {
-        let mut buf = [0;3];
+        let mut buf = [0; 3];
         self.i2c.write_read(self.address, &[reg as u8], &mut buf)?;
-        Ok(u32::from_be_bytes([0,buf[0],buf[1],buf[2]]))
+        Ok(u32::from_be_bytes([0, buf[0], buf[1], buf[2]]))
     }
 
     fn read_be_u16(&mut self, reg: u8) -> Result<u16, E> {
-        let mut buf = [0;2];
+        let mut buf = [0; 2];
         self.i2c.write_read(self.address, &[reg], &mut buf)?;
         Ok(u16::from_be_bytes(buf))
     }
@@ -309,5 +335,4 @@ where
         self.i2c.write(self.address, &[reg, buffer[0]])?;
         self.i2c.write(self.address, &[reg + 1, buffer[1]])
     }
-
 }
