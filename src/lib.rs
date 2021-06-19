@@ -1,19 +1,10 @@
 #![no_std]
 
-extern crate cast;
-extern crate embedded_hal as hal;
-extern crate i2c_hal_tools;
-
-
-use i2c_hal_tools::noincrement::NoIncrementI2c;
-use i2c_hal_tools::autoincrement::AutoIncrementI2c;
-use i2c_hal_tools::{SerialRead, SerialWrite};
-use hal::blocking::delay::{DelayUs};
-use hal::digital::OutputPin;
-use i2c_hal_tools::Register as R;
+use embedded_hal::blocking::i2c::{Write, WriteRead};
+use embedded_hal::blocking::delay::DelayUs;
+use embedded_hal::digital::v2::OutputPin;
 
 use core::fmt;
-
 
 pub struct Ampere {
     value: u32,
@@ -21,7 +12,6 @@ pub struct Ampere {
 }
 
 impl Ampere {
-
     pub fn new(value: u32, exponent: u8) -> Self {
         Self {
             value,
@@ -75,8 +65,6 @@ pub enum DelayUnit {
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone)]
 pub enum Register {
-
-
     // System control register
     SYS_CTRL = 0x40,
 
@@ -136,19 +124,6 @@ enum SysCtrl {
     GPIO_EN = 0x01,
 }
 
-impl R for Register {
-    fn addr(&self) -> u8 {
-        *self as u8
-    }
-}
-
-
-impl R for RoRegister {
-    fn addr(&self) -> u8 {
-        *self as u8
-    }
-}
-
 pub struct MFX<I2C, GPIO, Delay> {
     i2c: I2C,
     wakup: GPIO,
@@ -159,7 +134,7 @@ pub struct MFX<I2C, GPIO, Delay> {
 
 impl<I2C, GPIO, Delay, E> MFX<I2C, GPIO, Delay>
 where
-    I2C: SerialRead<AutoIncrementI2c, RoRegister, Error = E> + SerialRead<NoIncrementI2c, Register, Error = E> + SerialWrite<NoIncrementI2c, Register, Error = E>,
+    I2C: WriteRead<Error = E> + Write<Error = E>,
     GPIO: OutputPin,
     Delay: DelayUs<u32>,
 {
@@ -175,12 +150,12 @@ where
     }
 
     fn wakup(&mut self) -> Result<(), E> {
-        self.wakup.set_high();
+        let _ = self.wakup.set_high();
         self.delay.delay_us(1000);
-        self.wakup.set_low();
-        let mut mode = self.i2c.read_u8(self.address, Register::SYS_CTRL)?;
+        let _ = self.wakup.set_low();
+        let mut mode = self.read_u8(Register::SYS_CTRL as u8)?;
         mode |= SysCtrl::IDD_EN as u8;
-        self.i2c.write_u8(self.address, Register::SYS_CTRL, mode)?;
+        self.write_u8(Register::SYS_CTRL as u8, mode)?;
         Ok(())
     }
 
@@ -198,12 +173,12 @@ where
         };
         let nb_shunt = nb_shunt as u8;
         let value = (nb_shunt << 1) | cal | vref;
-        self.i2c.write_u8(self.address, Register::IDD_CTRL, value)?;
-        self.i2c.write_u8(self.address, Register::IDD_SHUNTS_ON_BOARD, nb_shunt)
+        self.write_u8(Register::IDD_CTRL as u8, value)?;
+        self.write_u8(Register::IDD_SHUNTS_ON_BOARD as u8, nb_shunt)
     }
 
     pub fn set_idd_nb_measurment(&mut self, nb: u8) -> Result<(), E> {
-        self.i2c.write_u8(self.address, Register::IDD_NBR_OF_MEAS, nb)
+        self.write_u8(Register::IDD_NBR_OF_MEAS as u8, nb)
     }
 
     pub fn set_idd_shunt0(&mut self, data: u16, stab_delay: u8 ) -> Result<(), E> {
@@ -227,34 +202,34 @@ where
     }
 
     fn set_idd_shunt(&mut self, reg_shunt: Register, data: u16, reg_delay: Register, stab_delay: u8) -> Result<(), E> {
-        self.i2c.write_be_u16(self.address, reg_shunt, data)?;
-        self.i2c.write_u8(self.address, reg_delay, stab_delay)
+        self.noinc_write_be_u16(reg_shunt as u8, data)?;
+        self.write_u8(reg_delay as u8, stab_delay)
     }
 
     pub fn set_idd_gain(&mut self, value: u16) -> Result<(), E> {
-        self.i2c.write_be_u16(self.address, Register::IDD_GAIN, value)
+        self.noinc_write_be_u16(Register::IDD_GAIN as u8, value)
     }
 
     pub fn set_idd_pre_delay(&mut self, unit: DelayUnit, value: u8) -> Result<(), E>{
         let value = self.cap_delay_value(value);
         let unit = unit as u8;
-        self.i2c.write_u8(self.address, Register::IDD_PRE_DELAY, unit & value)
+        self.write_u8(Register::IDD_PRE_DELAY as u8, unit & value)
     }
 
     pub fn set_idd_meas_delta_delay(&mut self, unit: DelayUnit, value: u8) -> Result<(), E> {
         let value = self.cap_delay_value(value);
         let unit = unit as u8;
-        self.i2c.write_u8(self.address, Register::IDD_MEAS_DELTA_DELAY, unit & value)
+        self.write_u8(Register::IDD_MEAS_DELTA_DELAY as u8, unit & value)
     }
 
     pub fn set_idd_vdd_min(&mut self, value: u16) -> Result<(), E> {
-        self.i2c.write_be_u16(self.address, Register::IDD_VDD_MIN, value)
+        self.noinc_write_be_u16(Register::IDD_VDD_MIN as u8, value)
     }
 
     pub fn idd_start(&mut self) -> Result<(), E> {
-        let mut mode = self.i2c.read_u8(self.address, Register::IDD_CTRL)?;
+        let mut mode = self.read_u8(Register::IDD_CTRL as u8)?;
         mode |= 1;
-        self.i2c.write_u8(self.address, Register::IDD_CTRL, mode)
+        self.write_u8(Register::IDD_CTRL as u8, mode)
     }
 
     pub fn idd_get_value(&mut self) -> Result<Ampere, E> {
@@ -263,32 +238,40 @@ where
         self.delay.delay_us(500_000);
         self.delay.delay_us(500_000);
         self.delay.delay_us(500_000);
-        let value = self.i2c.read_be_u24(self.address, RoRegister::IDD_VALUE)?;
-        Ok(Ampere::new(value, 8))
+        // read_be_u24
+        //let value = self.i2c.read_be_u24(self.address, RoRegister::IDD_VALUE)?;
+        let v = self.read_be_u24(RoRegister::IDD_VALUE as u8)?;
+        Ok(Ampere::new(v, 8))
     }
 
     pub fn idd_ctrl(&mut self) -> Result<u8, E> {
-        self.i2c.read_u8(self.address, Register::IDD_CTRL)
+        self.read_u8(Register::IDD_CTRL as u8)
     }
 
     pub fn idd_last_shunt_used(&mut self) -> Result<u8, E> {
-        self.i2c.read_u8(self.address, RoRegister::IDD_SHUNT_USED)
+        //self.i2c.read_u8(self.address, RoRegister::IDD_SHUNT_USED)
+        self.read_u8(RoRegister::IDD_SHUNT_USED as u8)
     }
 
     pub fn idd_shunts_on_board(&mut self) -> Result<u8, E> {
-        self.i2c.read_u8(self.address, Register::IDD_SHUNTS_ON_BOARD)
+        self.read_u8(Register::IDD_SHUNTS_ON_BOARD as u8)
     }
 
     pub fn error_code(&mut self) -> Result<u8, E> {
-        self.i2c.read_u8(self.address, RoRegister::ERROR_MSG)
+        //self.i2c.read_u8(self.address, RoRegister::ERROR_MSG)
+        let mut buf = [0;1];
+        self.i2c.write_read(self.address, &[RoRegister::ERROR_MSG as u8], &mut buf)?;
+        Ok(buf[0])
     }
 
     pub fn chip_id(&mut self) -> Result<u8, E> {
-        self.i2c.read_u8(self.address, RoRegister::ADR_ID)
+        //self.i2c.read_u8(self.address, RoRegister::ADR_ID)
+        self.read_u8(RoRegister::ADR_ID as u8)
     }
 
     pub fn firmware_version(&mut self) -> Result<u16, E> {
-        self.i2c.read_be_u16(self.address, RoRegister::ADR_FW_VERSION)
+        //self.i2c.read_be_u16(self.address, RoRegister::ADR_FW_VERSION)
+        self.read_be_u16(RoRegister::ADR_FW_VERSION as u8)
     }
 
     fn cap_delay_value(&mut self, value: u8) -> u8 {
@@ -298,4 +281,33 @@ where
             value
         }
     }
+
+    fn write_u8(&mut self, reg: u8, v: u8) -> Result<(), E> {
+        self.i2c.write(self.address, &[reg, v])
+    }
+
+    fn read_u8(&mut self, reg: u8) -> Result<u8, E> {
+        let mut buf = [0;1];
+        self.i2c.write_read(self.address, &[reg], &mut buf)?;
+        Ok(buf[0])
+    }
+
+    fn read_be_u24(&mut self, reg: u8) -> Result<u32, E> {
+        let mut buf = [0;3];
+        self.i2c.write_read(self.address, &[reg as u8], &mut buf)?;
+        Ok(u32::from_be_bytes([0,buf[0],buf[1],buf[2]]))
+    }
+
+    fn read_be_u16(&mut self, reg: u8) -> Result<u16, E> {
+        let mut buf = [0;2];
+        self.i2c.write_read(self.address, &[reg], &mut buf)?;
+        Ok(u16::from_be_bytes(buf))
+    }
+
+    fn noinc_write_be_u16(&mut self, reg: u8, v: u16) -> Result<(), E> {
+        let buffer: [u8; 2] = v.to_be_bytes();
+        self.i2c.write(self.address, &[reg, buffer[0]])?;
+        self.i2c.write(self.address, &[reg + 1, buffer[1]])
+    }
+
 }
