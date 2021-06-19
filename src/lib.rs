@@ -176,7 +176,7 @@ where
 
     fn wakup(&mut self) -> Result<(), E> {
         self.wakup.set_high();
-        self.delay.delay_us(10);
+        self.delay.delay_us(1000);
         self.wakup.set_low();
         let mut mode = self.i2c.read_u8(self.address, Register::SYS_CTRL)?;
         mode |= SysCtrl::IDD_EN as u8;
