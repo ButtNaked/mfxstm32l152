@@ -292,6 +292,12 @@ where
         Ok(())
     }
 
+    /// Return the state of IO pin(s).
+    pub fn pin_state(&mut self) -> Result<IoPin, E> {
+        let state = self.noinc_read_le_u24(Register::GPIO_STATE1 as u8)?;
+        Ok(IoPin::from_bits(state).unwrap())
+    }
+
     /// When GPIO is in output mode, puts the corresponding GPO in High (1) or Low (0) level
     pub fn set_pin_state(&mut self, pins: IoPin, state: bool) -> Result<(), E> {
         let reg = if state {
