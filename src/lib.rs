@@ -66,6 +66,41 @@ pub enum Register {
     // System control register
     SYS_CTRL = 0x40,
 
+    /// GPIO IRQ_GPI_SRC1/2/3 (R/W): registers enable or not the feature to generate irq
+    IRQ_GPI_SRC1 = 0x48, /* gpio [0:7] */
+    IRQ_GPI_SRC2 = 0x49, /* gpio [8:15] */
+    IRQ_GPI_SRC3 = 0x4A, /* agpio [0:7] */
+
+    /// GPIO DIRECTION (R/W,: GPIO pins direction: (0, input, (1, output.
+    GPIO_DIR1 = 0x60, /* gpio [0:7] */
+    GPIO_DIR2 = 0x61, /* gpio [8:15] */
+    GPIO_DIR3 = 0x62, /* agpio [0:7] */
+
+    /// GPIO TYPE (R/W,: If GPIO in output: (0, output push pull, (1, output open drain.
+    GPIO_TYPE1 = 0x64, /* gpio [0:7] */
+    GPIO_TYPE2 = 0x65, /* gpio [8:15] */
+    GPIO_TYPE3 = 0x66, /* agpio [0:7] */
+
+    /// GPIO PULL_UP_PULL_DOWN (R/W,:  discussion open with Jean Claude
+    GPIO_PUPD1 = 0x68, /* gpio [0:7] */
+    GPIO_PUPD2 = 0x69, /* gpio [8:15] */
+    GPIO_PUPD3 = 0x6A, /* agpio [0:7] */
+
+    /// GPIO SET (W,: When GPIO is in output mode, write (1, puts the corresponding GPO in High level.
+    GPO_SET1 = 0x6C, /* gpio [0:7] */
+    GPO_SET2 = 0x6D, /* gpio [8:15] */
+    GPO_SET3 = 0x6E, /* agpio [0:7] */
+
+    /// GPIO CLEAR (W,: When GPIO is in output mode, write (1, puts the corresponding GPO in Low level.
+    GPO_CLR1 = 0x70, /* gpio [0:7] */
+    GPO_CLR2 = 0x71, /* gpio [8:15] */
+    GPO_CLR3 = 0x72, /* agpio [0:7] */
+
+    /// GPIO STATE (R): Give state of the GPIO pin.
+    GPIO_STATE1 = 0x10, /* gpio [0:7] */
+    GPIO_STATE2 = 0x11, /* gpio [8:15] */
+    GPIO_STATE3 = 0x12, /* agpio [0:7] */
+
     // Idd control register (R/W)
     IDD_CTRL = 0x80,
 
@@ -122,6 +157,67 @@ enum SysCtrl {
     GPIO_EN = 0x01,
 }
 
+bitflags::bitflags! {
+    pub struct IoPin: u32 {
+        const IO_PIN_0    = 0x00000001;
+        const IO_PIN_1    = 0x00000002;
+        const IO_PIN_2    = 0x00000004;
+        const IO_PIN_3    = 0x00000008;
+        const IO_PIN_4    = 0x00000010;
+        const IO_PIN_5    = 0x00000020;
+        const IO_PIN_6    = 0x00000040;
+        const IO_PIN_7    = 0x00000080;
+        const IO_PIN_8    = 0x00000100;
+        const IO_PIN_9    = 0x00000200;
+        const IO_PIN_10   = 0x00000400;
+        const IO_PIN_11   = 0x00000800;
+        const IO_PIN_12   = 0x00001000;
+        const IO_PIN_13   = 0x00002000;
+        const IO_PIN_14   = 0x00004000;
+        const IO_PIN_15   = 0x00008000;
+        const AGPIO_PIN_0 = 0x00010000;
+        const AGPIO_PIN_1 = 0x00020000;
+        const AGPIO_PIN_2 = 0x00040000;
+        const IO_PIN_ALL  = 0x0003FFFF;
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IoMode {
+    INPUT = 0,       /* input floating */
+    OUTPUT,          /* output Push Pull */
+    IT_RISING_EDGE,  /* float input - irq detect on rising edge */
+    IT_FALLING_EDGE, /* float input - irq detect on falling edge */
+    IT_LOW_LEVEL,    /* float input - irq detect on low level */
+    IT_HIGH_LEVEL,   /* float input - irq detect on high level */
+    /* following modes only available on MFX*/
+    ANALOG,             /* analog mode */
+    OFF,                /* when pin isn't used*/
+    INPUT_PU,           /* input with internal pull up resistor */
+    INPUT_PD,           /* input with internal pull down resistor */
+    OUTPUT_OD,          /* Open Drain output without internal resistor */
+    OUTPUT_OD_PU,       /* Open Drain output with  internal pullup resistor */
+    OUTPUT_OD_PD,       /* Open Drain output with  internal pulldown resistor */
+    OUTPUT_PP,          /* PushPull output without internal resistor */
+    OUTPUT_PP_PU,       /* PushPull output with  internal pullup resistor */
+    OUTPUT_PP_PD,       /* PushPull output with  internal pulldown resistor */
+    IT_RISING_EDGE_PU,  /* push up resistor input - irq on rising edge  */
+    IT_RISING_EDGE_PD,  /* push dw resistor input - irq on rising edge  */
+    IT_FALLING_EDGE_PU, /* push up resistor input - irq on falling edge */
+    IT_FALLING_EDGE_PD, /* push dw resistor input - irq on falling edge */
+    IT_LOW_LEVEL_PU,    /* push up resistor input - irq detect on low level */
+    IT_LOW_LEVEL_PD,    /* push dw resistor input - irq detect on low level */
+    IT_HIGH_LEVEL_PU,   /* push up resistor input - irq detect on high level */
+    IT_HIGH_LEVEL_PD,   /* push dw resistor input - irq detect on high level */
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IoDir {
+    Input = 0,
+    Output = 1,
+}
+
 pub struct MFX<I2C, GPIO, Delay> {
     i2c: I2C,
     wakup: GPIO,
@@ -144,6 +240,68 @@ where
         };
         mfx.wakup()?;
         Ok(mfx)
+    }
+
+    /// Start the IO functionality used and enable the AF for selected IO pin(s)
+    pub fn init_io_pins(&mut self, pins: IoPin) -> Result<(), E> {
+        let mut mode = self.read_u8(Register::SYS_CTRL as u8)?;
+
+        // Set the IO Functionalities to be Enabled
+        mode |= SysCtrl::GPIO_EN as u8;
+
+        // Enable ALTERNATE functions
+        // AGPIO[0..3] can be either IDD or GPIO
+        // AGPIO[4..7] can be either TS or GPIO
+        // if IDD or TS are enabled no matter the value this bit GPIO are not available for those pins
+        //  however the MFX will waste some cycles to to handle these potential GPIO (pooling, etc)
+        // so if IDD and TS are both active it is better to let ALTERNATE off (0)
+        // if however IDD or TS are not connected then set it on gives more GPIOs availability
+        // remind that AGPIO are less efficient then normal GPIO (They use pooling rather then EXTI
+        if pins.bits() > 0xFFFF {
+            mode |= SysCtrl::ALTERNATE_GPIO_EN as u8;
+        } else {
+            mode &= !(SysCtrl::ALTERNATE_GPIO_EN as u8);
+        }
+        self.write_u8(Register::SYS_CTRL as u8, mode)?;
+
+        // Wait for 1 ms for MFX to change IRQ_out pin config, before activate it
+        self.delay.delay_us(1000);
+
+        Ok(())
+    }
+
+    /// Configures the IO pin(s) according to IO mode structure value.
+    pub fn set_pin_mode(&mut self, pins: IoPin, mode: IoMode) -> Result<(), E> {
+        match mode {
+            IoMode::OUTPUT => {
+                log::debug!("IR");
+                self.modify_reg_u24(Register::IRQ_GPI_SRC1, pins, false)?;
+                log::debug!("DIR1");
+                // OUTPUT
+                self.modify_reg_u24(Register::GPIO_DIR1, pins, true)?;
+                // PUSH_PULL
+                log::debug!("type1");
+                self.modify_reg_u24(Register::GPIO_TYPE1, pins, false)?;
+                // PUll_UP
+                log::debug!("pupd1");
+                self.modify_reg_u24(Register::GPIO_PUPD1, pins, false)?;
+            }
+            _ => todo!(),
+        }
+
+        Ok(())
+    }
+
+    /// When GPIO is in output mode, puts the corresponding GPO in High (1) or Low (0) level
+    pub fn set_pin_state(&mut self, pins: IoPin, state: bool) -> Result<(), E> {
+        let reg = if state {
+            Register::GPO_SET1
+        } else {
+            Register::GPO_CLR1
+        };
+        self.modify_reg_u24(reg, pins, state)?;
+
+        Ok(())
     }
 
     fn wakup(&mut self) -> Result<(), E> {
@@ -320,7 +478,7 @@ where
 
     fn read_be_u24(&mut self, reg: u8) -> Result<u32, E> {
         let mut buf = [0; 3];
-        self.i2c.write_read(self.address, &[reg as u8], &mut buf)?;
+        self.i2c.write_read(self.address, &[reg], &mut buf)?;
         Ok(u32::from_be_bytes([0, buf[0], buf[1], buf[2]]))
     }
 
@@ -334,5 +492,37 @@ where
         let buffer: [u8; 2] = v.to_be_bytes();
         self.i2c.write(self.address, &[reg, buffer[0]])?;
         self.i2c.write(self.address, &[reg + 1, buffer[1]])
+    }
+
+    fn noinc_write_le_u24(&mut self, reg: u8, val: u32) -> Result<(), E> {
+        let buf = val.to_le_bytes();
+        log::debug!("le24: 0x{:X?}", &buf);
+        self.i2c.write(self.address, &[reg, buf[0]])?;
+        self.i2c.write(self.address, &[reg + 1, buf[1]])?;
+        self.i2c.write(self.address, &[reg + 2, buf[2]])?;
+        Ok(())
+    }
+
+    fn noinc_read_le_u24(&mut self, reg: u8) -> Result<u32, E> {
+        let mut buf = [0; 3];
+        self.i2c.write_read(self.address, &[reg], &mut buf[0..1])?;
+        self.i2c
+            .write_read(self.address, &[reg + 1], &mut buf[1..2])?;
+        self.i2c
+            .write_read(self.address, &[reg + 2], &mut buf[2..3])?;
+        log::debug!("le24: 0x{:X?}", &buf);
+        Ok(u32::from_le_bytes([buf[0], buf[1], buf[2], 0]))
+    }
+
+    fn modify_reg_u24(&mut self, reg: Register, pins: IoPin, flag: bool) -> Result<(), E> {
+        let mut val = self.noinc_read_le_u24(reg as u8)?;
+        if flag {
+            val |= pins.bits();
+        } else {
+            val &= !(pins.bits());
+        }
+        self.noinc_write_le_u24(reg as u8, val)?;
+
+        Ok(())
     }
 }
