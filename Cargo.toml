@@ -20,7 +20,6 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1.2.1"
-log = "*"
 
 [dependencies.embedded-hal]
 version = "0.2.2"

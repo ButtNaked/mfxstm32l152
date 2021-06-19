@@ -274,16 +274,12 @@ where
     pub fn set_pin_mode(&mut self, pins: IoPin, mode: IoMode) -> Result<(), E> {
         match mode {
             IoMode::OUTPUT => {
-                log::debug!("IR");
                 self.modify_reg_u24(Register::IRQ_GPI_SRC1, pins, false)?;
-                log::debug!("DIR1");
                 // OUTPUT
                 self.modify_reg_u24(Register::GPIO_DIR1, pins, true)?;
                 // PUSH_PULL
-                log::debug!("type1");
                 self.modify_reg_u24(Register::GPIO_TYPE1, pins, false)?;
                 // PUll_UP
-                log::debug!("pupd1");
                 self.modify_reg_u24(Register::GPIO_PUPD1, pins, false)?;
             }
             _ => todo!(),
@@ -502,7 +498,6 @@ where
 
     fn noinc_write_le_u24(&mut self, reg: u8, val: u32) -> Result<(), E> {
         let buf = val.to_le_bytes();
-        log::debug!("le24: 0x{:X?}", &buf);
         self.i2c.write(self.address, &[reg, buf[0]])?;
         self.i2c.write(self.address, &[reg + 1, buf[1]])?;
         self.i2c.write(self.address, &[reg + 2, buf[2]])?;
@@ -516,7 +511,6 @@ where
             .write_read(self.address, &[reg + 1], &mut buf[1..2])?;
         self.i2c
             .write_read(self.address, &[reg + 2], &mut buf[2..3])?;
-        log::debug!("le24: 0x{:X?}", &buf);
         Ok(u32::from_le_bytes([buf[0], buf[1], buf[2], 0]))
     }
 
